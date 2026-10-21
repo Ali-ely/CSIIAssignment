@@ -13,6 +13,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <set>
+#include <typeinfo>
 #include <utility>
 
 namespace {
@@ -154,6 +156,106 @@ void copying() {
     }
     assignmentCheck<Engineer>(); assignmentCheck<Medic>();
     assignmentCheck<MaintenanceBot>(); assignmentCheck<MedicalDrone>();
+}
+
+// Ignore only the leading ID when comparing complete printed role state/history.
+std::string stateWithoutId(const Entity& entity) {
+    std::ostringstream out;
+    entity.printDetails(out);
+    return out.str().substr(out.str().find(' '));
+}
+
+void worldManagement() {
+    World world;
+    std::ostringstream empty;
+    world.listEntities(empty);
+    check(empty.str().find("no entities") != std::string::npos, "empty listing");
+    std::set<int> issued;
+    for (int kind = 1; kind <= 4; ++kind) {
+        const auto type = static_cast<EntityKind>(kind);
+        const int defaultId = world.createDefault(type);
+        check(issued.insert(defaultId).second && defaultId > 0, "unique default ID");
+        auto expectedDefault = EntityFactory::createDefault(type);
+        check(stateWithoutId(*world.find(defaultId)) == stateWithoutId(*expectedDefault),
+              "World preserves concrete defaults");
+
+        EntitySettings custom;
+        custom.name = "Custom role " + std::to_string(kind);
+        custom.health = 47; custom.maxHealth = 170; custom.active = false;
+        custom.energy = 23; custom.maxEnergy = 190;
+        custom.skill = 8; custom.supplies = 321;
+        const int originalId = world.create(type, custom);
+        check(issued.insert(originalId).second, "unique custom ID");
+        Entity* original = world.find(originalId);
+        auto expectedCustom = EntityFactory::create(type, custom);
+        check(stateWithoutId(*original) == stateWithoutId(*expectedCustom),
+              "World preserves all custom attributes");
+        for (int entry = 0; entry < 40; ++entry)
+            original->addLog("Original history " + std::to_string(entry));
+        const std::string before = stateWithoutId(*original);
+        const int duplicateId = world.duplicate(originalId);
+        check(issued.insert(duplicateId).second, "unique duplicate ID");
+        Entity* duplicate = world.find(duplicateId);
+        check(typeid(*original) == typeid(*duplicate) &&
+              stateWithoutId(*duplicate) == before, "duplicate preserves complete state except ID");
+        for (std::size_t entry = 0; entry < original->logSize(); ++entry)
+            check(&original->logEntry(entry) != &duplicate->logEntry(entry),
+                  "duplicate owns separate dynamic storage");
+        auto edited = custom;
+        edited.name = "Edited duplicate"; edited.health = 80; edited.maxHealth = 200;
+        edited.active = true; edited.energy = 91; edited.maxEnergy = 210;
+        edited.skill = 3; edited.supplies = 17;
+        check(world.modify(duplicateId, edited), "modify existing duplicate");
+        auto expectedEdit = EntityFactory::create(type, edited);
+        for (int entry = 0; entry < 40; ++entry)
+            expectedEdit->addLog("Original history " + std::to_string(entry));
+        check(duplicate->id() == duplicateId &&
+              stateWithoutId(*duplicate) == stateWithoutId(*expectedEdit),
+              "editing preserves ID, concrete type and history");
+        duplicate->addLog("Duplicate only");
+        check(stateWithoutId(*original) == before, "editing duplicate leaves original unchanged");
+        check(world.erase(duplicateId) && !world.find(duplicateId), "delete duplicate");
+        check(stateWithoutId(*world.find(originalId)) == before,
+              "deleting duplicate leaves original alive and unchanged");
+        const int anotherId = world.duplicate(originalId);
+        check(issued.insert(anotherId).second && anotherId > duplicateId, "deleted IDs are not reused");
+        check(world.erase(originalId) && stateWithoutId(*world.find(anotherId)) == before,
+              "duplicate also survives original deletion");
+    }
+    check(world.entityCount() == 8, "all four types share one collection");
+    const auto before = fingerprint(world);
+    const World& readOnly = world;
+    std::ostringstream listing;
+    readOnly.listEntities(listing);
+    for (std::size_t i = 0; i < readOnly.entityCount(); ++i) {
+        const Entity& entity = readOnly.entityAt(i);
+        check(readOnly.find(entity.id()) == &entity, "const lookup matches collection");
+        check(listing.str().find("#" + std::to_string(entity.id()) + " | " + entity.name())
+              != std::string::npos, "listing includes every entity");
+        std::ostringstream actual, expected;
+        entity.printDetails(expected);
+        check(readOnly.inspect(entity.id(), actual) && actual.str() == expected.str(),
+              "inspection includes all role details and history");
+    }
+    std::ostringstream missing;
+    check(!world.inspect(-1, missing) && !world.modify(-1, EntitySettings{}) && !world.erase(-1),
+          "unknown IDs rejected");
+    const auto mustReject = [&](auto operation) {
+        bool rejected = false;
+        try { operation(); } catch (const std::invalid_argument&) { rejected = true; }
+        check(rejected && fingerprint(world) == before, "invalid operation leaves world and next ID unchanged");
+    };
+    mustReject([&] { world.add(nullptr); });
+    mustReject([&] { world.duplicate(-1); });
+    mustReject([&] { world.createDefault(static_cast<EntityKind>(99)); });
+    mustReject([&] { world.create(static_cast<EntityKind>(99), EntitySettings{}); });
+    const int targetId = world.entityAt(0).id();
+    auto invalid = world.find(targetId)->settings();
+    invalid.name = "Must not be applied"; invalid.energy = invalid.maxEnergy + 1;
+    mustReject([&] { world.modify(targetId, invalid); });
+    for (int kind = 1; kind <= 4; ++kind)
+        mustReject([&] { world.create(static_cast<EntityKind>(kind), invalid); });
+    check(fingerprint(world) == before, "list and inspect are read-only");
 }
 
 void undoAllActions() {
@@ -322,6 +424,7 @@ int main() {
     try {
         containers(); std::cout << "PASS custom stack and queue\n";
         copying(); std::cout << "PASS dynamic copying and assignment\n";
+        worldManagement(); std::cout << "PASS World entity management and duplicate independence\n";
         undoAllActions(); std::cout << "PASS exact multi-level undo\n";
         capabilitiesAndEvents(); std::cout << "PASS capabilities, polymorphism and FIFO events\n";
         boundariesAndOutcomes(); std::cout << "PASS bounds, outcomes and ownership stress\n";

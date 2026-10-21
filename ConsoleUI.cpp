@@ -95,8 +95,7 @@ void ConsoleUI::run() {
         case 3: simulation_.world().listEntities(out_); break;
         case 4:
             if (!readId("Entity ID: ", id)) return;
-            if (const Entity* entity = simulation_.world().find(id)) entity->printDetails(out_);
-            else out_ << "Unknown entity ID.\n";
+            simulation_.world().inspect(id, out_);
             break;
         case 5: {
             if (!readId("Entity ID to modify: ", id)) return;

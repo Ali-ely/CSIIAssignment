@@ -40,6 +40,11 @@ public:
     const CustomQueue<Event>& pendingEvents() const { return events_; }
     Entity* find(int id);
     const Entity* find(int id) const;
+    // Management uses the same factory and virtual validation as the UI.
+    int createDefault(EntityKind kind);
+    int create(EntityKind kind, const EntitySettings& settings);
+    bool modify(int id, const EntitySettings& settings);
+    bool inspect(int id, std::ostream& out) const;
     int add(std::unique_ptr<Entity> entity);
     bool erase(int id);
     int duplicate(int id);

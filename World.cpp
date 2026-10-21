@@ -1,4 +1,5 @@
 #include "World.h"
+#include "EntityFactory.h"
 #include "EventProcessor.h"
 #include <algorithm>
 #include <iomanip>
@@ -38,6 +39,30 @@ Entity* World::find(int id) {
 const Entity* World::find(int id) const {
     for (const auto& entity : entities_) if (entity->id() == id) return entity.get();
     return nullptr;
+}
+
+int World::createDefault(EntityKind kind) {
+    return add(EntityFactory::createDefault(kind));
+}
+
+int World::create(EntityKind kind, const EntitySettings& settings) {
+    return add(EntityFactory::create(kind, settings));
+}
+
+bool World::modify(int id, const EntitySettings& settings) {
+    Entity* target = find(id);
+    if (!target) return false;
+    // Concrete configure methods validate all fields before changing state.
+    // Identity is private to World and cannot be edited through settings.
+    target->configure(settings);
+    return true;
+}
+
+bool World::inspect(int id, std::ostream& out) const {
+    const Entity* target = find(id);
+    if (!target) { out << "Unknown entity ID.\n"; return false; }
+    target->printDetails(out);
+    return true;
 }
 
 int World::add(std::unique_ptr<Entity> entity) {

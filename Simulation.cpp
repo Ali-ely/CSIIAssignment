@@ -1,5 +1,4 @@
 #include "Simulation.h"
-#include "EntityFactory.h"
 #include "HealingCapability.h"
 #include "RepairCapability.h"
 #include <exception>
@@ -31,7 +30,7 @@ bool Simulation::transact(const std::function<bool(World&, std::ostream&)>& acti
 
 bool Simulation::createDefault(EntityKind kind, std::ostream& out) {
     return transact([=](World& world, std::ostream& report) {
-        const int id = world.add(EntityFactory::createDefault(kind));
+        const int id = world.createDefault(kind);
         report << "Created " << world.find(id)->kindName() << " #" << id << ".\n";
         return true;
     }, out);
@@ -39,7 +38,7 @@ bool Simulation::createDefault(EntityKind kind, std::ostream& out) {
 
 bool Simulation::create(EntityKind kind, const EntitySettings& settings, std::ostream& out) {
     return transact([&](World& world, std::ostream& report) {
-        const int id = world.add(EntityFactory::create(kind, settings));
+        const int id = world.create(kind, settings);
         report << "Created " << world.find(id)->kindName() << " #" << id << ".\n";
         return true;
     }, out);
@@ -63,10 +62,8 @@ bool Simulation::remove(int id, std::ostream& out) {
 
 bool Simulation::modify(int id, const EntitySettings& settings, std::ostream& out) {
     return transact([&](World& world, std::ostream& report) {
-        Entity* target = world.find(id);
-        if (!target) { report << "Unknown entity ID.\n"; return false; }
-        target->configure(settings);
-        target->addLog("Attributes edited by the colony operator.");
+        if (!world.modify(id, settings)) { report << "Unknown entity ID.\n"; return false; }
+        world.find(id)->addLog("Attributes edited by the colony operator.");
         report << "Updated #" << id << ".\n";
         return true;
     }, out);
