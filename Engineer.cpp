@@ -15,6 +15,11 @@ Engineer::Engineer() : Engineer(defaults()) {}
 Engineer::Engineer(const EntitySettings& settings)
     : Colonist(settings), resources_(settings) {}
 
+// The base deep-copies history; role resources have independent value state.
+Engineer::Engineer(const Engineer& other) = default;
+Engineer& Engineer::operator=(const Engineer& other) = default;
+Engineer::~Engineer() = default;
+
 EntitySettings Engineer::settings() const {
     auto result = colonistSettings();
     resources_.fillSettings(result);

@@ -15,6 +15,11 @@ MaintenanceBot::MaintenanceBot() : MaintenanceBot(defaults()) {}
 MaintenanceBot::MaintenanceBot(const EntitySettings& settings)
     : Robot(settings), resources_(settings) {}
 
+// The base deep-copies history; role resources have independent value state.
+MaintenanceBot::MaintenanceBot(const MaintenanceBot& other) = default;
+MaintenanceBot& MaintenanceBot::operator=(const MaintenanceBot& other) = default;
+MaintenanceBot::~MaintenanceBot() = default;
+
 EntitySettings MaintenanceBot::settings() const {
     auto result = robotSettings();
     resources_.fillSettings(result);

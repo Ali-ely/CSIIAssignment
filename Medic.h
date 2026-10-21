@@ -13,8 +13,9 @@ class Medic final : public Colonist, public HealingCapability {
 public:
     Medic();
     explicit Medic(const EntitySettings& settings);
-    Medic(const Medic& other) = default;
-    Medic& operator=(const Medic& other) = default;
+    Medic(const Medic& other);
+    Medic& operator=(const Medic& other);
+    ~Medic() override;
     const char* kindName() const override { return "Medic"; }
     EntitySettings settings() const override;
     void configure(const EntitySettings& settings) override;

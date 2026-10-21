@@ -12,6 +12,8 @@ class Colonist : public Entity {
 protected:
     Colonist();
     explicit Colonist(const EntitySettings& settings);
+    Colonist(const Colonist& other);
+    Colonist& operator=(const Colonist& other);
     bool spendStamina(int amount);
     void rest(std::ostream& out);
     void applyColonistSettings(const EntitySettings& settings);
@@ -19,6 +21,7 @@ protected:
     void printColonist(std::ostream& out) const;
 
 public:
+    ~Colonist() override;
     bool isBiological() const final { return true; }
     int stamina() const { return stamina_; }
 };

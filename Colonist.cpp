@@ -7,6 +7,11 @@ Colonist::Colonist() : Colonist(EntitySettings{}) {}
 Colonist::Colonist(const EntitySettings& settings)
     : Entity(settings), stamina_(settings.energy), maxStamina_(settings.maxEnergy) {}
 
+// Entity owns/copies the history; stamina is copied by value at this level.
+Colonist::Colonist(const Colonist& other) = default;
+Colonist& Colonist::operator=(const Colonist& other) = default;
+Colonist::~Colonist() = default;
+
 bool Colonist::spendStamina(int amount) {
     if (amount < 0) throw std::invalid_argument("Stamina cost cannot be negative.");
     if (stamina_ < amount) return false;

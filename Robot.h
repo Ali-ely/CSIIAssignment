@@ -12,6 +12,8 @@ class Robot : public Entity {
 protected:
     Robot();
     explicit Robot(const EntitySettings& settings);
+    Robot(const Robot& other);
+    Robot& operator=(const Robot& other);
     bool spendBattery(int amount);
     void charge(std::ostream& out);
     void applyRobotSettings(const EntitySettings& settings);
@@ -19,6 +21,7 @@ protected:
     void printRobot(std::ostream& out) const;
 
 public:
+    ~Robot() override;
     bool isBiological() const final { return false; }
     int battery() const { return battery_; }
 };

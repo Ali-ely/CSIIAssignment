@@ -13,8 +13,9 @@ class MaintenanceBot final : public Robot, public RepairCapability {
 public:
     MaintenanceBot();
     explicit MaintenanceBot(const EntitySettings& settings);
-    MaintenanceBot(const MaintenanceBot& other) = default;
-    MaintenanceBot& operator=(const MaintenanceBot& other) = default;
+    MaintenanceBot(const MaintenanceBot& other);
+    MaintenanceBot& operator=(const MaintenanceBot& other);
+    ~MaintenanceBot() override;
     const char* kindName() const override { return "MaintenanceBot"; }
     EntitySettings settings() const override;
     void configure(const EntitySettings& settings) override;

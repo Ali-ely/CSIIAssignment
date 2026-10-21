@@ -11,6 +11,21 @@ g++ -std=c++17 -Wall -Wextra -pedantic *.cpp -o simworld
 ./simworld
 ~~~
 
+For a repeatable GCC build of the application and all regression tests on Linux
+or Ubuntu/WSL, use:
+
+~~~sh
+bash build.sh
+bash build.sh --sanitize
+~~~
+
+Both builds use `g++ -std=c++17 -Wall` plus stricter warnings treated as errors.
+The sanitizer build also checks address errors, undefined behavior, and leaks.
+Outputs stay in the ignored `build/gcc` and `build/gcc-sanitized` directories.
+From PowerShell in this project directory, run
+`wsl -d Ubuntu --exec bash ./build.sh`. The GCC-built Linux application runs with
+`wsl -d Ubuntu --exec ./build/gcc/simworld`.
+
 On Windows, the build helper finds GCC or the installed Visual Studio C++ tools, treats warnings as errors, builds the application and regression tests, and runs the tests:
 
 ~~~powershell
@@ -32,6 +47,14 @@ g++ -std=c++17 -Wall -Wextra -pedantic -I. $(find . -maxdepth 1 -name '*.cpp' ! 
 ~~~
 
 The application and tests have separate main functions. Do not compile tests/SimWorldTests.cpp into the application executable. The application's source uses only the C++ standard library.
+
+Both build helpers also compile and run `tests/EntityTests.cpp` as a separate
+`entity_tests` executable. This focused milestone test covers all four concrete
+types: default and parameterized constructors, valid/invalid attribute bounds,
+copy construction, assignment, independent history storage, polymorphic cloning,
+and deleting the original through an `Entity` pointer. For each concrete type,
+the owned variable-sized array is the history in its `Entity` base subobject;
+the allocation is exclusive to that object, including after copying.
 
 ## Try a short session
 

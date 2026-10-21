@@ -12,6 +12,8 @@ class World;
 // Root of the three-level hierarchy. Identity, health, and an independently
 // allocated history belong to every entity. Only World assigns IDs. The raw
 // history array deliberately demonstrates the Rule of Three required by F2.
+// Each concrete object's base subobject owns its own array; defaulted derived
+// copy operations invoke this deep copy instead of sharing history storage.
 class Entity {
     friend class World;
     int id_ = 0; // Zero means a newly constructed object not yet in a world.

@@ -13,8 +13,9 @@ class MedicalDrone final : public Robot, public HealingCapability {
 public:
     MedicalDrone();
     explicit MedicalDrone(const EntitySettings& settings);
-    MedicalDrone(const MedicalDrone& other) = default;
-    MedicalDrone& operator=(const MedicalDrone& other) = default;
+    MedicalDrone(const MedicalDrone& other);
+    MedicalDrone& operator=(const MedicalDrone& other);
+    ~MedicalDrone() override;
     const char* kindName() const override { return "MedicalDrone"; }
     EntitySettings settings() const override;
     void configure(const EntitySettings& settings) override;

@@ -7,6 +7,11 @@ Robot::Robot() : Robot(EntitySettings{}) {}
 Robot::Robot(const EntitySettings& settings)
     : Entity(settings), battery_(settings.energy), maxBattery_(settings.maxEnergy) {}
 
+// Entity owns/copies the history; battery is copied by value at this level.
+Robot::Robot(const Robot& other) = default;
+Robot& Robot::operator=(const Robot& other) = default;
+Robot::~Robot() = default;
+
 bool Robot::spendBattery(int amount) {
     if (amount < 0) throw std::invalid_argument("Battery cost cannot be negative.");
     if (battery_ < amount) return false;

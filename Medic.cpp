@@ -15,6 +15,11 @@ Medic::Medic() : Medic(defaults()) {}
 Medic::Medic(const EntitySettings& settings)
     : Colonist(settings), resources_(settings) {}
 
+// The base deep-copies history; role resources have independent value state.
+Medic::Medic(const Medic& other) = default;
+Medic& Medic::operator=(const Medic& other) = default;
+Medic::~Medic() = default;
+
 EntitySettings Medic::settings() const {
     auto result = colonistSettings();
     resources_.fillSettings(result);

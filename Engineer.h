@@ -13,8 +13,9 @@ class Engineer final : public Colonist, public RepairCapability {
 public:
     Engineer();
     explicit Engineer(const EntitySettings& settings);
-    Engineer(const Engineer& other) = default;
-    Engineer& operator=(const Engineer& other) = default;
+    Engineer(const Engineer& other);
+    Engineer& operator=(const Engineer& other);
+    ~Engineer() override;
     const char* kindName() const override { return "Engineer"; }
     EntitySettings settings() const override;
     void configure(const EntitySettings& settings) override;

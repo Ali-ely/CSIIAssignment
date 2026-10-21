@@ -6,6 +6,7 @@ New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
 $sourceFiles = @(Get-ChildItem -LiteralPath $projectRoot -Filter '*.cpp' | Sort-Object Name)
 $coreFiles = @($sourceFiles | Where-Object Name -ne 'main.cpp')
 $testFile = Join-Path $projectRoot 'tests/SimWorldTests.cpp'
+$entityTestFile = Join-Path $projectRoot 'tests/EntityTests.cpp'
 $gcc = Get-Command g++ -ErrorAction SilentlyContinue
 if ($gcc) {
     $flags = @('-std=c++17', '-Wall', '-Wextra', '-Werror', '-pedantic', '-g')
@@ -14,6 +15,10 @@ if ($gcc) {
     if ($LASTEXITCODE -ne 0) { throw 'Application compilation failed.' }
     & $gcc.Source @flags '-I' $projectRoot @($coreFiles.FullName) $testFile '-o' (Join-Path $buildRoot 'simworld_tests.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Test compilation failed.' }
+    & $gcc.Source @flags '-I' $projectRoot @($coreFiles.FullName) $entityTestFile '-o' (Join-Path $buildRoot 'entity_tests.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Entity test compilation failed.' }
+    & (Join-Path $buildRoot 'entity_tests.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Entity tests failed.' }
     & (Join-Path $buildRoot 'simworld_tests.exe')
     if ($LASTEXITCODE -ne 0) { throw 'Regression tests failed.' }
 } else {
@@ -34,6 +39,10 @@ if ($gcc) {
         ('cl ' + $flags + ' /Fe:simworld.exe ' + $quotedApp + ' /link /INCREMENTAL:NO'),
         'if errorlevel 1 exit /b 1',
         ('cl ' + $flags + ' /I"' + $projectRoot + '" /Fe:simworld_tests.exe ' + $quotedCore + ' "' + $testFile + '" /link /INCREMENTAL:NO'),
+        'if errorlevel 1 exit /b 1',
+        ('cl ' + $flags + ' /I"' + $projectRoot + '" /Fe:entity_tests.exe ' + $quotedCore + ' "' + $entityTestFile + '" /link /INCREMENTAL:NO'),
+        'if errorlevel 1 exit /b 1',
+        'entity_tests.exe',
         'if errorlevel 1 exit /b 1',
         'simworld_tests.exe',
         'exit /b %errorlevel%'

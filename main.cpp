@@ -88,6 +88,14 @@ Tool: OpenAI Codex.
    Used: diagnosis of the repository with no initial commit, preservation of
    destination IDs during entity assignment, and regression coverage for all
    four roles including queued event targets.
+4. Request: validate Milestone 1 under the GitHub version-control protocol,
+   including the required GCC build and tests before commit/push approval.
+   Used: a Linux/WSL GCC build script, shell-script line-ending settings, and
+   build instructions. Milestone results are recorded in MILESTONE_1.md.
+5. Request: complete the inheritance/entity milestone with validated attributes,
+   constructors, deep copying, polymorphic cloning, and a focused test; then stop.
+   Used: explicit out-of-line copy/destructor definitions, rejection of control
+   characters in entity names, and tests/EntityTests.cpp in both build helpers.
    Student modifications/review: TODO - record what you changed and verified.
 Both team members must review and be able to explain the submitted program.
 The assignment requires the AI chat thread to accompany the source submission.

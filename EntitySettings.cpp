@@ -1,11 +1,15 @@
 #include "EntitySettings.h"
 
+#include <algorithm>
+#include <cctype>
 #include <stdexcept>
 
 void EntitySettings::validate() const {
     if (name.empty() || name.size() > 60 ||
         name.find_first_not_of(" \t\r\n") == std::string::npos ||
-        name.find_first_of("\r\n\t") != std::string::npos) {
+        std::any_of(name.begin(), name.end(), [](unsigned char character) {
+            return std::iscntrl(character) != 0;
+        })) {
         throw std::invalid_argument("Name must contain 1-60 readable characters.");
     }
     if (maxHealth < 1 || maxHealth > 1000 || health < 0 || health > maxHealth)

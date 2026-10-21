@@ -15,6 +15,11 @@ MedicalDrone::MedicalDrone() : MedicalDrone(defaults()) {}
 MedicalDrone::MedicalDrone(const EntitySettings& settings)
     : Robot(settings), resources_(settings) {}
 
+// The base deep-copies history; role resources have independent value state.
+MedicalDrone::MedicalDrone(const MedicalDrone& other) = default;
+MedicalDrone& MedicalDrone::operator=(const MedicalDrone& other) = default;
+MedicalDrone::~MedicalDrone() = default;
+
 EntitySettings MedicalDrone::settings() const {
     auto result = robotSettings();
     resources_.fillSettings(result);
