@@ -195,8 +195,22 @@ void World::advanceTurn(std::ostream& out) {
     }
     // Every surviving active entity acts once, even on the final turn.
     // improveHabitat refuses to revive a habitat that has already collapsed.
-    for (auto& entity : entities_)
-        if (entity->active()) entity->takeTurn(*this, out);
+    // Dispatch only through Entity's virtual interface; roles decide their own
+    // actions. Inactive objects remain inspectable until explicitly deleted.
+    for (auto& entity : entities_) {
+        if (!entity->active()) {
+            out << "  #" << entity->id() << " is inactive; turn skipped.\n";
+            continue;
+        }
+        const auto before = entity->settings();
+        out << "  " << entity->kindName() << " #" << entity->id()
+            << " (" << entity->name() << ") acts:\n";
+        entity->takeTurn(*this, out);
+        const auto after = entity->settings();
+        // Event effects are reported separately when the FIFO queue drains.
+        out << "    Energy: " << before.energy << " -> " << after.energy
+            << " | Supplies: " << before.supplies << " -> " << after.supplies << '\n';
+    }
     processEvents(out);
     evaluateOutcome(out);
     out << "End of turn " << turn_ << ": habitat " << habitatIntegrity_ << "/100.\n";

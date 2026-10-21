@@ -396,6 +396,114 @@ void boundariesAndOutcomes() {
     }
 }
 
+void turnSimulation() {
+    Simulation batch, singles;
+    std::ostringstream setup;
+    for (int kind = 1; kind <= 4; ++kind) {
+        EntitySettings settings;
+        settings.name = "Turn role " + std::to_string(kind);
+        settings.health = 20;
+        check(batch.create(static_cast<EntityKind>(kind), settings, setup) &&
+              singles.create(static_cast<EntityKind>(kind), settings, setup), "prepare turn colony");
+    }
+    std::ostringstream batchReport, singleReport;
+    check(batch.runTurns(3, batchReport), "run three consecutive turns");
+    for (int turn = 1; turn <= 3; ++turn) {
+        check(singles.runTurns(1, singleReport), "run a single turn");
+        const World& world = singles.world();
+        check(world.turn() == turn && world.habitatIntegrity() == 100 - turn,
+              "turn counter, upkeep and engineer habitat work");
+        check(world.find(1)->settings().energy == 100 - 12 * turn &&
+              world.find(2)->settings().energy == 100 - 10 * turn &&
+              world.find(3)->settings().energy == 100 - 10 * turn &&
+              world.find(4)->settings().energy == 100 - 8 * turn,
+              "each role acts once and pays its own energy cost");
+        check(world.find(2)->settings().supplies == 10 + turn &&
+              world.find(3)->settings().supplies == 10 - turn &&
+              world.find(4)->settings().supplies == 10 - 2 * turn,
+              "treatment, repair and delivery inventories evolve");
+        check(world.pendingEvents().empty(), "turn resolves queued effects");
+    }
+    check(fingerprint(batch.world()) == fingerprint(singles.world()),
+          "batch equals consecutive single turns");
+    check(batch.world().find(1)->health() + batch.world().find(2)->health() == 94 &&
+          batch.world().find(3)->health() + batch.world().find(4)->health() == 94,
+          "three treatments and repairs change health");
+    for (const char* action : {"Engineer #1", "Medic #2", "MaintenanceBot #3",
+                               "MedicalDrone #4", "strengthens the habitat",
+                               "queued treatment", "queued repair", "dispatches",
+                               "Energy: 100 -> 88", "End of turn 3"})
+        check(batchReport.str().find(action) != std::string::npos, "clear distinct action reports");
+
+    World recovery;
+    for (int kind = 1; kind <= 4; ++kind) {
+        EntitySettings exhausted;
+        exhausted.health = 20; exhausted.energy = 0;
+        recovery.create(static_cast<EntityKind>(kind), exhausted);
+    }
+    recovery.advanceTurn(setup);
+    check(recovery.find(1)->settings().energy == 25 && recovery.find(2)->settings().energy == 25 &&
+          recovery.find(3)->settings().energy == 30 && recovery.find(4)->settings().energy == 30,
+          "exhausted colonists rest and robots recharge");
+    recovery.advanceTurn(setup);
+    check(recovery.find(1)->settings().energy == 13 && recovery.find(2)->settings().energy == 15 &&
+          recovery.find(3)->settings().energy == 20 && recovery.find(4)->settings().energy == 22,
+          "recovered entities resume role actions next turn");
+
+    World inactive;
+    inactive.createDefault(EntityKind::Engineer);
+    for (int kind = 1; kind <= 4; ++kind) {
+        EntitySettings disabled;
+        disabled.active = false; disabled.health = 0; disabled.energy = 17;
+        inactive.create(static_cast<EntityKind>(kind), disabled);
+    }
+    World initial(inactive);
+    for (int turn = 0; turn < 3; ++turn) inactive.advanceTurn(setup);
+    for (int id = 2; id <= 5; ++id)
+        check(stateWithoutId(*inactive.find(id)) == stateWithoutId(*initial.find(id)),
+              "inactive roles never act, recover or receive effects");
+
+    // Without an engineer, upkeep becomes critical on turn 12. The fragile
+    // bot dies before dispatch, so it must not act or receive its queued repair.
+    World danger;
+    EntitySettings medic;
+    medic.supplies = 0;
+    danger.create(EntityKind::Medic, medic);
+    EntitySettings fragile;
+    fragile.health = 5; fragile.supplies = 0;
+    const int bot = danger.create(EntityKind::MaintenanceBot, fragile);
+    for (int turn = 0; turn < 11; ++turn) danger.advanceTurn(setup);
+    check(danger.enqueueEvent(Event{EventKind::RepairRequest, 0, bot, 10, "Pending repair"}, setup),
+          "queue repair before critical upkeep");
+    const auto oldLogSize = danger.find(bot)->logSize();
+    std::ostringstream critical;
+    danger.advanceTurn(critical);
+    check(!danger.find(bot)->active() && danger.find(bot)->health() == 0 &&
+          danger.find(bot)->logSize() == oldLogSize + 1,
+          "critical damage deactivates entity before its action");
+    check(critical.str().find("became inactive") != std::string::npos &&
+          critical.str().find("turn skipped") != std::string::npos &&
+          critical.str().find("Request discarded") != std::string::npos,
+          "deactivation and discarded event clearly reported");
+    const auto deadState = stateWithoutId(*danger.find(bot));
+    danger.advanceTurn(setup);
+    check(stateWithoutId(*danger.find(bot)) == deadState, "newly inactive entity stays unchanged");
+    check(danger.erase(bot), "remove inactive entity safely");
+
+    World removed;
+    removed.createDefault(EntityKind::Engineer);
+    const int target = removed.createDefault(EntityKind::MedicalDrone);
+    check(removed.enqueueEvent(Event{EventKind::RepairRequest, 0, target, 10, "Deleted target"}, setup),
+          "queue event before deletion");
+    check(removed.erase(target), "delete active entity before next turn");
+    std::ostringstream afterDeletion;
+    removed.advanceTurn(afterDeletion);
+    check(!removed.find(target) && removed.entityCount() == 1 && removed.pendingEvents().empty() &&
+          afterDeletion.str().find("Request discarded") != std::string::npos &&
+          afterDeletion.str().find("MedicalDrone") == std::string::npos,
+          "deleted entity never acts and stale event is safely discarded");
+}
+
 void consoleInput() {
     std::istringstream input("oops\n999999999999999999999999999999999\n1junk\n-5\n16\n1\n7\n1\n4\n999\n14\n14\n0\n");
     std::ostringstream output;
@@ -428,6 +536,7 @@ int main() {
         undoAllActions(); std::cout << "PASS exact multi-level undo\n";
         capabilitiesAndEvents(); std::cout << "PASS capabilities, polymorphism and FIFO events\n";
         boundariesAndOutcomes(); std::cout << "PASS bounds, outcomes and ownership stress\n";
+        turnSimulation(); std::cout << "PASS consecutive turns, recovery, inactivity and deletion\n";
         consoleInput(); std::cout << "PASS console validation and EOF\n";
         std::cout << "All regression groups passed.\n";
     } catch (const std::exception& error) {
