@@ -83,7 +83,8 @@ void ConsoleUI::menu() const {
 }
 
 void ConsoleUI::run() {
-    out_ << "Build a colony and survive 20 turns. Create at least one colonist before running.\n"
+    out_ << "Colony Survival: keep stability above zero for " << World::survivalTarget << " turns.\n"
+         << "Create at least one colonist before running. Use option 15 for progress and rules.\n"
          << "Engineers support the habitat; medics treat colonists; maintenance bots repair\n"
          << "robots; medical drones deliver medicine. All successful changes support undo.\n";
     while (true) {
@@ -157,9 +158,13 @@ void ConsoleUI::run() {
         case 15:
             simulation_.world().showStatus(out_);
             out_ << "Undo levels: " << simulation_.undoDepth() << "\n"
-                 << "Upkeep costs 6 habitat integrity/turn. Below 30, active entities take 10 damage.\n"
-                 << "Win: finish turn 20 with a surviving colonist and positive habitat integrity.\n"
-                 << "Lose: habitat reaches zero or no active colonists remain at turn end.\n"
+                 << "Colony stability is habitat integrity: starts at 100, capped at 100.\n"
+                 << "Upkeep costs 6 stability/turn. Below 30, active entities take 10 damage.\n"
+                 << "Engineers restore 3 + skill/2 stability when they can work.\n"
+                 << "Each effective repair, treatment or supply event restores 1 stability.\n"
+                 << "Win: finish " << World::survivalTarget << " turns with an active colonist and positive stability.\n"
+                 << "Lose: stability reaches zero or no active colonists remain at turn end.\n"
+                 << "Zero stability cannot recover. Undo can restore the colony before defeat.\n"
                  << "Events process after entity actions. Equal-priority targets use creation order.\n"
                  << "Emergency requests cost 10 energy and 1 supply; costs are paid when queued.\n"
                  << "A deleted/inactive event target causes the request to be discarded without refund.\n"

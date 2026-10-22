@@ -99,6 +99,15 @@ The menu validates complete input lines, IDs, attribute ranges, and target eligi
 
 ## Mission rules and limitations
 
+- Colony Survival uses habitat integrity as its stability metric (0-100). Check
+  option 15 for stability, survival progress and rules; each turn also prints
+  progress and mission outcome. Create an Engineer with option 1, add supporting
+  roles, and use option 12 or 13 to advance one or multiple turns.
+- Each repair, treatment or supply-delivery event with a positive actual effect
+  restores 1 stability, capped at 100. This includes entity-generated requests,
+  special capabilities (options 8/9), and manual assistance (option 10).
+  Zero-effect and discarded requests earn no bonus. Once stability reaches zero,
+  no action or event can revive the colony; option 14 can undo the losing run.
 - Habitat starts at 100 and loses 6 each turn. Engineers restore 3 + skill/2 integrity at a cost of 12 stamina.
 - Below 30 habitat integrity, active entities take 10 damage before acting. Zero health makes an entity inactive. A habitat that reaches zero cannot be repaired.
 - Colonists without enough energy rest for up to 25 stamina; robots charge for up to 30 battery. These changes respect each entity's maximum.

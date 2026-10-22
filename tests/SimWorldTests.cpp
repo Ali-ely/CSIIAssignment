@@ -331,7 +331,7 @@ void capabilitiesAndEvents() {
     check(simulation.world().pendingEvents().empty(), "turn drains events");
     check(simulation.world().find(1)->health() > 30 && simulation.world().find(3)->health() > 30, "medical and repair effects");
     check(simulation.world().find(4)->settings().supplies < 9, "drone distinct delivery behavior");
-    check(simulation.world().habitatIntegrity() == 99, "engineer distinct habitat behavior");
+    check(simulation.world().habitatIntegrity() == 100, "engineer and effective events restore habitat");
     check(simulation.undo(out) && fingerprint(simulation.world()) == before, "complex turn undo exact");
 
     World fifo;
@@ -412,8 +412,8 @@ void turnSimulation() {
     for (int turn = 1; turn <= 3; ++turn) {
         check(singles.runTurns(1, singleReport), "run a single turn");
         const World& world = singles.world();
-        check(world.turn() == turn && world.habitatIntegrity() == 100 - turn,
-              "turn counter, upkeep and engineer habitat work");
+        check(world.turn() == turn && world.habitatIntegrity() == 100,
+              "turn counter, upkeep, engineer habitat work and event bonuses");
         check(world.find(1)->settings().energy == 100 - 12 * turn &&
               world.find(2)->settings().energy == 100 - 10 * turn &&
               world.find(3)->settings().energy == 100 - 10 * turn &&
@@ -821,6 +821,89 @@ void menuInputBoundaries() {
     check(output.str().find("Input could not be read") != std::string::npos, "bad input stream exits instead of looping");
 }
 
+void colonySurvival() {
+    Simulation winner;
+    std::ostringstream report;
+    check(winner.createDefault(EntityKind::Engineer, report) && winner.runTurns(19, report),
+          "prepare colony one turn before victory");
+    check(winner.world().outcome() == Outcome::Running && winner.world().stability() > 0,
+          "no premature victory before target turn");
+    const auto beforeVictory = fingerprint(winner.world());
+    check(winner.runTurns(1000, report) && winner.world().turn() == World::survivalTarget &&
+          winner.world().outcome() == Outcome::Won && winner.world().stability() > 0,
+          "victory stops a multi-turn batch at the survival target");
+    const auto victory = fingerprint(winner.world());
+    const auto wonDepth = winner.undoDepth();
+    check(!winner.runTurns(1, report) && !winner.enterEvent(EventKind::MedicalRequest, 1, 5, report) &&
+          winner.undoDepth() == wonDepth && fingerprint(winner.world()) == victory,
+          "ended mission blocks further turns and events without mutation");
+    check(winner.undo(report) && fingerprint(winner.world()) == beforeVictory,
+          "undo restores progress, stability and outcome before victory");
+    auto inactive = winner.world().find(1)->settings();
+    inactive.active = false;
+    check(winner.modify(1, inactive, report) && winner.runTurns(1, report) &&
+          winner.world().turn() == World::survivalTarget && winner.world().outcome() == Outcome::Lost,
+          "failure takes precedence over reaching target without active colonists");
+
+    World assisted;
+    const int medic = assisted.createDefault(EntityKind::Medic);
+    const int bot = assisted.createDefault(EntityKind::MaintenanceBot);
+    assisted.advanceTurn(report);
+    check(assisted.stability() == 94, "upkeep lowers stability when no assistance is needed");
+    assisted.find(medic)->damage(5);
+    assisted.find(bot)->damage(5);
+    for (Event event : {Event{EventKind::MedicalRequest, 0, medic, 5, "Treatment"},
+                        Event{EventKind::RepairRequest, 0, bot, 5, "Repair"},
+                        Event{EventKind::SupplyDelivery, 0, medic, 5, "Supplies"}}) {
+        const int previous = assisted.stability();
+        check(assisted.enqueueEvent(event, report), "queue effective assistance");
+        assisted.processEvents(report);
+        check(assisted.stability() == previous + 1, "each effective event adds one stability");
+    }
+    auto full = assisted.find(medic)->settings(); full.supplies = 10000;
+    check(assisted.modify(medic, full), "fill inventory for capped effect");
+    check(assisted.enqueueEvent(Event{EventKind::MedicalRequest, 0, medic, 5, "Full health"}, report) &&
+          assisted.enqueueEvent(Event{EventKind::RepairRequest, 0, bot, 5, "Full integrity"}, report) &&
+          assisted.enqueueEvent(Event{EventKind::SupplyDelivery, 0, medic, 5, "Full inventory"}, report),
+          "queue events with no effective gain");
+    assisted.processEvents(report);
+    check(assisted.stability() == 97, "ineffective events do not award stability");
+    check(assisted.enqueueEvent(Event{EventKind::RepairRequest, 0, bot, 5, "Deleted"}, report) &&
+          assisted.erase(bot), "remove event target before processing");
+    assisted.processEvents(report);
+    check(assisted.stability() == 97 && assisted.improveHabitat(1000) == 3 && assisted.stability() == 100,
+          "discarded events give no bonus and stability is capped");
+
+    Simulation collapse;
+    EntitySettings unassisted; unassisted.supplies = 0;
+    check(collapse.create(EntityKind::Medic, unassisted, report) && collapse.runTurns(16, report) &&
+          collapse.world().stability() == 4, "colony approaches collapse without support");
+    check(collapse.enterEvent(EventKind::SupplyDelivery, 1, 5, report), "queue assistance before collapse");
+    const auto beforeCollapse = fingerprint(collapse.world());
+    check(collapse.runTurns(20, report) && collapse.world().turn() == 17 &&
+          collapse.world().stability() == 0 && collapse.world().outcome() == Outcome::Lost &&
+          collapse.world().find(1)->medicalSupplyCount() == 5,
+          "assistance effects cannot revive stability after it reaches zero");
+    check(collapse.undo(report) && fingerprint(collapse.world()) == beforeCollapse,
+          "undo defeat restores stability, pending assistance and survival progress");
+    Simulation empty;
+    check(empty.runTurns(1, report) && empty.world().stability() == 94 &&
+          empty.world().outcome() == Outcome::Lost, "no active colonists causes loss despite positive stability");
+    const auto output = report.str();
+    for (const char* expected : {"Survival progress: 20/20", "Colony stability (habitat):",
+                                 "Mission: won", "Mission: lost", "colony stability reached zero",
+                                 "no active colonists remain"})
+        check(output.find(expected) != std::string::npos, "progress and both outcomes clearly reported");
+    std::istringstream input("15\n1\n1\n12\n15\n0\n");
+    std::ostringstream console;
+    ConsoleUI ui(input, console);
+    ui.run();
+    check(console.str().find("Survival progress: 0/20") != std::string::npos &&
+          console.str().find("Survival progress: 1/20") != std::string::npos &&
+          console.str().find("Each effective repair, treatment or supply event restores 1 stability") != std::string::npos,
+          "status menu explains survival and updates progress");
+}
+
 void consoleInput() {
     std::istringstream input("oops\n999999999999999999999999999999999\n1junk\n-5\n16\n1\n7\n1\n4\n999\n14\n14\n0\n");
     std::ostringstream output;
@@ -858,6 +941,7 @@ int main() {
         fifoEventLifecycle(); std::cout << "PASS mixed FIFO events, inspection and queue lifetime\n";
         snapshotUndoLifecycle(); std::cout << "PASS exact snapshot undo and stack ownership\n";
         menuInputBoundaries(); std::cout << "PASS menu input boundaries and interrupted forms\n";
+        colonySurvival(); std::cout << "PASS colony stability, survival victory and failure\n";
         consoleInput(); std::cout << "PASS console validation and EOF\n";
         std::cout << "All regression groups passed.\n";
     } catch (const std::exception& error) {

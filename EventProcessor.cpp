@@ -21,4 +21,11 @@ void EventProcessor::apply(World& world, const Event& event, std::ostream& out) 
         out << "Delivered " << actual << " medical supplies.\n";
         break;
     }
+    // Effective assistance strengthens the colony; rejected or capped-to-zero
+    // events earn nothing. A collapsed habitat cannot be revived by a bonus.
+    if (actual > 0) {
+        const int gain = world.improveHabitat(1);
+        out << "  Colony stability +" << gain << " from effective assistance ("
+            << world.stability() << "/100).\n";
+    }
 }

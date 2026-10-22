@@ -9,6 +9,9 @@ Humans and robots cooperate to keep a habitat alive for 20 turns. Upkeep costs
 bots queue robot repairs, and medical drones queue medicine deliveries. Energy
 and inventories limit work. Below 30 integrity, active entities take 10 damage.
 Zero health makes an entity inactive. Events run FIFO after all entity actions.
+Colony stability is habitat integrity. Each effective repair, treatment or
+supply event adds 1 stability (maximum 100); zero stability cannot recover.
+The console reports stability and survival progress after every turn.
 
 Entity (abstract)
   +-- Colonist (abstract): stamina and rest

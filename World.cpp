@@ -178,10 +178,10 @@ void World::evaluateOutcome(std::ostream& out) {
         if (entity->active() && entity->isBiological()) colonistAlive = true;
     if (habitatIntegrity_ == 0 || !colonistAlive) {
         outcome_ = Outcome::Lost;
-        out << "Colony lost: " << (habitatIntegrity_ == 0 ? "habitat integrity reached zero." : "no active colonists remain.") << '\n';
-    } else if (turn_ >= 20) {
+        out << "Colony lost: " << (habitatIntegrity_ == 0 ? "colony stability reached zero." : "no active colonists remain.") << '\n';
+    } else if (turn_ >= survivalTarget) {
         outcome_ = Outcome::Won;
-        out << "Colony survived 20 turns. Mission accomplished!\n";
+        out << "Colony survived " << survivalTarget << " turns. Mission accomplished!\n";
     }
 }
 
@@ -221,6 +221,7 @@ void World::advanceTurn(std::ostream& out) {
     processEvents(out);
     evaluateOutcome(out);
     out << "End of turn " << turn_ << ": habitat " << habitatIntegrity_ << "/100.\n";
+    showStatus(out);
 }
 
 void World::listEntities(std::ostream& out) const {
@@ -244,7 +245,8 @@ void World::showEvents(std::ostream& out) const {
 }
 
 void World::showStatus(std::ostream& out) const {
-    out << "Turn " << turn_ << "/20 | Habitat " << habitatIntegrity_ << "/100 | Entities "
+    out << "Survival progress: " << turn_ << '/' << survivalTarget
+        << " turns | Colony stability (habitat): " << stability() << "/100 | Entities "
         << entities_.size() << " | Pending events " << events_.size() << "\nMission: ";
     switch (outcome_) {
     case Outcome::Running: out << "in progress"; break;

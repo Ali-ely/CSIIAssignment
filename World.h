@@ -23,6 +23,7 @@ class World {
 
     void evaluateOutcome(std::ostream& out);
 public:
+    static constexpr int survivalTarget = 20;
     World() = default;
     World(const World& other);
     World& operator=(const World& other);
@@ -34,6 +35,8 @@ public:
     int turn() const { return turn_; }
     int nextId() const { return nextId_; }
     int habitatIntegrity() const { return habitatIntegrity_; }
+    // Stability is the existing habitat metric, not a second diverging value.
+    int stability() const { return habitatIntegrity_; }
     Outcome outcome() const { return outcome_; }
     std::size_t entityCount() const { return entities_.size(); }
     const Entity& entityAt(std::size_t index) const { return *entities_.at(index); }
