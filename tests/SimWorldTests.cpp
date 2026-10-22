@@ -564,6 +564,95 @@ void optionalCapabilities() {
         check(text.find(expected) != std::string::npos, "menu continues after failed capability casts");
 }
 
+void fifoEventLifecycle() {
+    // Exercise a long linked chain, independent copies, replacement, moves,
+    // repeated emptying and reuse. Sanitizers also check every node's lifetime.
+    CustomQueue<std::string> queue;
+    for (int i = 0; i < 1000; ++i) queue.enqueue(std::to_string(i) + std::string(100, 'x'));
+    CustomQueue<std::string> copy(queue), assigned;
+    assigned.enqueue("replace this node");
+    assigned = queue;
+    queue.clear(); queue.clear();
+    check(queue.empty() && queue.size() == 0 && !queue.front(), "clear resets head, tail and size");
+    CustomQueue<std::string> moved;
+    moved.enqueue("replace during move");
+    moved = std::move(assigned);
+    check(assigned.empty() && assigned.size() == 0, "move assignment releases old chain and transfers ownership");
+    for (int i = 0; i < 1000; ++i) {
+        const auto expected = std::to_string(i) + std::string(100, 'x');
+        std::string a, b;
+        check(copy.dequeue(a) && moved.dequeue(b) && a == expected && b == expected,
+              "copied and moved queues preserve full FIFO order after original clear");
+    }
+    std::string untouched = "unchanged";
+    check(!moved.dequeue(untouched) && untouched == "unchanged" && !moved.front(), "empty dequeue is harmless");
+    moved.enqueue("reused");
+    check(moved.dequeue(untouched) && untouched == "reused" && moved.empty(), "tail is reusable after drain");
+
+    Simulation simulation;
+    std::ostringstream setup;
+    for (int kind = 1; kind <= 4; ++kind) {
+        EntitySettings settings;
+        if (kind == 1 || kind == 3) settings.health = 40;
+        check(simulation.create(static_cast<EntityKind>(kind), settings, setup), "create mixed-event colony");
+    }
+    check(simulation.enterEvent(EventKind::RepairRequest, 3, 5, setup) &&
+          simulation.enterEvent(EventKind::MedicalRequest, 1, 7, setup) &&
+          simulation.enterEvent(EventKind::SupplyDelivery, 2, 4, setup), "manually enqueue all event types");
+    const auto before = fingerprint(simulation.world());
+    const auto depth = simulation.undoDepth();
+    std::ostringstream firstView, secondView;
+    simulation.world().showEvents(firstView);
+    simulation.world().showEvents(secondView);
+    check(firstView.str() ==
+          "1. Repair request | source external | target #3 | amount 5 | External colony request\n"
+          "2. Medical request | source external | target #1 | amount 7 | External colony request\n"
+          "3. Supply delivery | source external | target #2 | amount 4 | External colony request\n" &&
+          firstView.str() == secondView.str() && fingerprint(simulation.world()) == before &&
+          simulation.undoDepth() == depth, "complete pending display preserves queue and world");
+    std::ostringstream report;
+    check(simulation.runTurns(1, report), "process manual and generated events together");
+    const auto text = report.str();
+    const auto phase = text.find("Event phase: after all entity actions.");
+    check(phase != std::string::npos && text.find("dispatches") < phase &&
+          text.find("Processing 6 pending events") > phase,
+          "entities append all three types before FIFO event phase");
+    // These effects reveal manual arrival order followed by Medic, Bot, Drone
+    // generation order; reordering by kind or source would fail this check.
+    std::size_t cursor = phase;
+    for (const char* expected : {
+             "Event: Repair request -> #3. Restored 5",
+             "Event: Medical request -> #1. Restored 7",
+             "Event: Supply delivery -> #2. Delivered 4",
+             "Event: Medical request -> #1. Restored 18",
+             "Event: Repair request -> #3. Restored 18",
+             "Event: Supply delivery -> #2. Delivered 2"}) {
+        const auto position = text.find(expected, cursor);
+        check(position != std::string::npos, "mixed events resolve in exact arrival order");
+        cursor = position + std::string(expected).size();
+    }
+    check(simulation.world().find(1)->health() == 65 && simulation.world().find(3)->health() == 63 &&
+          simulation.world().find(2)->medicalSupplyCount() == 15 &&
+          simulation.world().pendingEvents().empty(), "distinct event effects applied exactly once");
+    World drained(simulation.world());
+    const auto resolved = fingerprint(drained);
+    std::ostringstream empty;
+    drained.processEvents(empty);
+    drained.showEvents(empty);
+    check(fingerprint(drained) == resolved && empty.str().find("No pending events") != std::string::npos,
+          "empty processing and inspection do not change state or repeat effects");
+
+    std::istringstream input("1\n2\n10\n3\n1\n4\n11\n11\n12\n0\n");
+    std::ostringstream output;
+    ConsoleUI ui(input, output);
+    ui.run();
+    const auto menu = output.str();
+    const auto entry = menu.find("1. Supply delivery | source external | target #1 | amount 4");
+    check(entry != std::string::npos && menu.find("1. Supply delivery | source external", entry + 1)
+          != std::string::npos && menu.find("Delivered 4 medical supplies") != std::string::npos,
+          "user can enqueue, inspect repeatedly and process an event from menu");
+}
+
 void consoleInput() {
     std::istringstream input("oops\n999999999999999999999999999999999\n1junk\n-5\n16\n1\n7\n1\n4\n999\n14\n14\n0\n");
     std::ostringstream output;
@@ -598,6 +687,7 @@ int main() {
         boundariesAndOutcomes(); std::cout << "PASS bounds, outcomes and ownership stress\n";
         turnSimulation(); std::cout << "PASS consecutive turns, recovery, inactivity and deletion\n";
         optionalCapabilities(); std::cout << "PASS optional capability cast matrix and menu recovery\n";
+        fifoEventLifecycle(); std::cout << "PASS mixed FIFO events, inspection and queue lifetime\n";
         consoleInput(); std::cout << "PASS console validation and EOF\n";
         std::cout << "All regression groups passed.\n";
     } catch (const std::exception& error) {

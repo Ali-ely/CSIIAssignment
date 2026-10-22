@@ -159,11 +159,17 @@ bool World::enqueueEvent(Event event, std::ostream& out) {
 }
 
 void World::processEvents(std::ostream& out) {
-    if (events_.empty()) out << "  No pending events.\n";
+    if (events_.empty()) { out << "  No pending events.\n"; return; }
+    const std::size_t pending = events_.size();
+    out << "  Processing " << pending << " pending events in FIFO arrival order.\n";
+    std::size_t position = 0;
     Event event;
     // Handlers never enqueue: every accepted event is processed once in FIFO
     // order, including requests entered before this turn began.
-    while (events_.dequeue(event)) EventProcessor::apply(*this, event, out);
+    while (events_.dequeue(event)) {
+        out << "  [" << ++position << '/' << pending << "]\n";
+        EventProcessor::apply(*this, event, out);
+    }
 }
 
 void World::evaluateOutcome(std::ostream& out) {
@@ -211,6 +217,7 @@ void World::advanceTurn(std::ostream& out) {
         out << "    Energy: " << before.energy << " -> " << after.energy
             << " | Supplies: " << before.supplies << " -> " << after.supplies << '\n';
     }
+    out << "Event phase: after all entity actions.\n";
     processEvents(out);
     evaluateOutcome(out);
     out << "End of turn " << turn_ << ": habitat " << habitatIntegrity_ << "/100.\n";
