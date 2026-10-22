@@ -135,8 +135,11 @@ bool Simulation::runTurns(int count, std::ostream& out) {
 }
 
 bool Simulation::undo(std::ostream& out) {
+    // Deliberately bypass transact: consuming a snapshot must not save the
+    // world being undone or create a cycle of undoing the undo itself.
     if (!history_.pop(world_)) { out << "Nothing to undo.\n"; return false; }
     out << "Restored the world before the last successful action.\n";
     world_.showStatus(out);
+    out << "Undo entries remaining: " << history_.size() << '\n';
     return true;
 }

@@ -87,6 +87,14 @@ CustomQueue owns event nodes and processes them FIFO at the end of each turn. Ev
 
 Simulation stages each command in a complete world copy. A successful command moves the old world onto CustomStack and commits the candidate. Failed commands add no undo entry. Snapshots contain entities, independent logs, pending events in order, the turn, ID allocator, habitat integrity, and outcome. Run N is one undo action. Read-only operations do not consume history. Full snapshots use memory proportional to world size times retained undo depth.
 
+Undo follows command order across turns: create, run three turns, then edit
+requires three undos to reverse the edit, the entire three-turn run, then the
+creation. Undo restores the whole snapshot, including concrete types, entity
+order, dynamically allocated history, pending events and mission outcome. It
+pops exactly one entry without recording another; an empty stack leaves the
+world unchanged. There is no redo. A new command after undo starts from the
+restored world and allocator, so an undone entity ID may be reused.
+
 The menu validates complete input lines, IDs, attribute ranges, and target eligibility. Zero-health entities must be inactive. Health and energy maximums are 1-1000, skill is 1-10, and inventory is 0-10000. Unknown entity IDs and unsupported capabilities produce messages without changing state. EOF exits safely, including during a partially completed form.
 
 ## Mission rules and limitations

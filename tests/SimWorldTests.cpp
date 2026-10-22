@@ -16,6 +16,7 @@
 #include <set>
 #include <typeinfo>
 #include <utility>
+#include <vector>
 
 namespace {
 void check(bool condition, const std::string& description) {
@@ -653,6 +654,115 @@ void fifoEventLifecycle() {
           "user can enqueue, inspect repeatedly and process an event from menu");
 }
 
+void snapshotUndoLifecycle() {
+    Simulation simulation;
+    std::ostringstream report;
+    const std::string emptyWorld = fingerprint(simulation.world());
+    check(!simulation.undo(report) && simulation.undoDepth() == 0 &&
+          fingerprint(simulation.world()) == emptyWorld, "empty undo leaves world unchanged");
+
+    // Independent expected worlds capture every observable field and retain
+    // dynamic storage for non-aliasing comparisons after each restoration.
+    std::vector<World> expected;
+    const auto command = [&](auto action) {
+        expected.emplace_back(simulation.world());
+        const auto depth = simulation.undoDepth();
+        check(action(), "recorded command succeeds");
+        check(simulation.undoDepth() == depth + 1, "one snapshot per successful command");
+    };
+    for (int kind = 1; kind <= 4; ++kind) {
+        EntitySettings custom;
+        custom.name = "Undo role " + std::to_string(kind);
+        custom.health = 40; custom.maxHealth = 150;
+        custom.energy = 75; custom.maxEnergy = 120;
+        custom.skill = 7; custom.supplies = 30;
+        command([&] { return simulation.create(static_cast<EntityKind>(kind), custom, report); });
+    }
+    // Grow each raw history array beyond its initial capacity before deletion.
+    for (int round = 0; round < 6; ++round) {
+        for (int id = 1; id <= 4; ++id) {
+            auto changed = simulation.world().find(id)->settings();
+            changed.supplies += 1;
+            command([&] { return simulation.modify(id, changed, report); });
+        }
+    }
+    command([&] { return simulation.enterEvent(EventKind::MedicalRequest, 1, 5, report); });
+    command([&] { return simulation.enterEvent(EventKind::RepairRequest, 3, 7, report); });
+    command([&] { return simulation.runTurns(3, report); });
+    // Keep one active colonist while deleting every original role, so later
+    // interleaved turns test undo rather than ending the mission early.
+    command([&] { return simulation.createDefault(EntityKind::Engineer, report); });
+    for (int id = 1; id <= 4; ++id) {
+        command([&] { return simulation.duplicate(id, report); });
+        const int copyId = simulation.world().nextId() - 1;
+        auto changed = simulation.world().find(copyId)->settings();
+        changed.name = "Changed copy"; changed.active = false;
+        changed.health = 0; changed.maxHealth = 220;
+        changed.energy = 3; changed.maxEnergy = 230;
+        changed.skill = 2; changed.supplies = 17;
+        command([&] { return simulation.modify(copyId, changed, report); });
+        command([&] { return simulation.remove(id, report); });
+        command([&] { return simulation.runTurns(1, report); });
+    }
+    const auto beforeFailure = fingerprint(simulation.world());
+    const auto depth = simulation.undoDepth();
+    check(!simulation.remove(999, report) && !simulation.duplicate(999, report) &&
+          simulation.undoDepth() == depth && fingerprint(simulation.world()) == beforeFailure,
+          "failed operations do not disturb chronological undo history");
+
+    while (!expected.empty()) {
+        const World& previous = expected.back();
+        const auto oldDepth = simulation.undoDepth();
+        check(simulation.undo(report) && simulation.undoDepth() == oldDepth - 1,
+              "undo consumes exactly one entry and never records itself");
+        check(fingerprint(simulation.world()) == fingerprint(previous),
+              "undo restores exact world, events, allocator, outcome and dynamic history");
+        for (std::size_t i = 0; i < previous.entityCount(); ++i) {
+            const Entity& actual = simulation.world().entityAt(i);
+            const Entity& saved = previous.entityAt(i);
+            check(typeid(actual) == typeid(saved), "undo restores exact concrete type");
+            for (std::size_t entry = 0; entry < actual.logSize(); ++entry)
+                check(&actual.logEntry(entry) != &saved.logEntry(entry),
+                      "restored history owns independent dynamic storage");
+        }
+        expected.pop_back();
+    }
+    check(fingerprint(simulation.world()) == emptyWorld && !simulation.undo(report) &&
+          simulation.undoDepth() == 0, "all changes unwind in reverse order to empty world");
+    check(simulation.createDefault(EntityKind::MedicalDrone, report) &&
+          simulation.world().find(1) && simulation.undoDepth() == 1 && simulation.undo(report) &&
+          fingerprint(simulation.world()) == emptyWorld && !simulation.undo(report),
+          "new branch after undo uses restored ID allocator without stale history");
+
+    CustomStack<World> stack;
+    World source;
+    source.createDefault(EntityKind::Engineer);
+    for (int i = 0; i < 100; ++i) {
+        source.find(1)->addLog("Snapshot " + std::to_string(i));
+        stack.push(source);
+    }
+    CustomStack<World> copied(stack), assigned;
+    assigned.push(World{});
+    assigned = stack;
+    stack.clear(); stack.clear();
+    CustomStack<World> moved;
+    moved.push(World{});
+    moved = std::move(assigned);
+    check(stack.empty() && stack.size() == 0 && !stack.top() && assigned.empty(),
+          "stack clear and move reset ownership");
+    World a, b;
+    for (int size = 100; size > 0; --size) {
+        check(copied.pop(a) && moved.pop(b) && fingerprint(a) == fingerprint(b) &&
+              a.find(1)->logSize() == static_cast<std::size_t>(size),
+              "copied and moved world stacks pop in exact LIFO order");
+        a.find(1)->addLog("Changed popped world");
+        check(b.find(1)->logSize() == static_cast<std::size_t>(size), "popped snapshots remain independent");
+    }
+    const auto last = fingerprint(b);
+    check(!moved.pop(b) && fingerprint(b) == last && moved.size() == 0 && !moved.top(),
+          "empty stack pop leaves destination unchanged");
+}
+
 void consoleInput() {
     std::istringstream input("oops\n999999999999999999999999999999999\n1junk\n-5\n16\n1\n7\n1\n4\n999\n14\n14\n0\n");
     std::ostringstream output;
@@ -688,6 +798,7 @@ int main() {
         turnSimulation(); std::cout << "PASS consecutive turns, recovery, inactivity and deletion\n";
         optionalCapabilities(); std::cout << "PASS optional capability cast matrix and menu recovery\n";
         fifoEventLifecycle(); std::cout << "PASS mixed FIFO events, inspection and queue lifetime\n";
+        snapshotUndoLifecycle(); std::cout << "PASS exact snapshot undo and stack ownership\n";
         consoleInput(); std::cout << "PASS console validation and EOF\n";
         std::cout << "All regression groups passed.\n";
     } catch (const std::exception& error) {
