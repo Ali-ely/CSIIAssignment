@@ -118,6 +118,10 @@ void ConsoleUI::run() {
             break;
         case 8:
         case 9:
+            if (choice == 8)
+                out_ << "Repair: Engineer or MaintenanceBot actor; damaged robot target.\n";
+            else
+                out_ << "Medical assistance: Medic or MedicalDrone actor; injured colonist target.\n";
             if (!readId("Actor ID: ", id) || !readId("Target ID: ", target)) return;
             if (choice == 8) simulation_.repair(id, target, out_);
             else simulation_.heal(id, target, out_);

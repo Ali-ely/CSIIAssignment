@@ -504,6 +504,66 @@ void turnSimulation() {
           "deleted entity never acts and stale event is safely discarded");
 }
 
+void optionalCapabilities() {
+    // Exercise both actual command-handler casts for every concrete type.
+    // Each attempt starts from the same state so failed casts cannot hide costs.
+    for (int kind = 1; kind <= 4; ++kind) {
+        for (bool repair : {true, false}) {
+            Simulation simulation;
+            std::ostringstream setup, report;
+            check(simulation.createDefault(static_cast<EntityKind>(kind), setup), "create capability actor");
+            EntitySettings injured;
+            injured.health = 40;
+            check(simulation.create(repair ? EntityKind::MaintenanceBot : EntityKind::Engineer,
+                                    injured, setup), "create suitable capability target");
+            const std::string before = fingerprint(simulation.world());
+            const auto depth = simulation.undoDepth();
+            const bool expected = repair ? (kind == 1 || kind == 3) : (kind == 2 || kind == 4);
+            const bool accepted = repair ? simulation.repair(1, 2, report) : simulation.heal(1, 2, report);
+            check(accepted == expected, "optional capability membership matches design");
+            if (expected) {
+                const auto actor = simulation.world().find(1)->settings();
+                const Event* event = simulation.world().pendingEvents().front();
+                check(actor.energy == 90 && actor.supplies == 9 &&
+                      simulation.world().find(2)->health() == 40 && event &&
+                      event->sourceId == 1 && event->targetId == 2 && event->amount == 18 &&
+                      event->kind == (repair ? EventKind::RepairRequest : EventKind::MedicalRequest),
+                      "successful cast queues correct effect and charges exactly once");
+                World resolved(simulation.world());
+                resolved.processEvents(report);
+                check(resolved.find(2)->health() == 58 && resolved.pendingEvents().empty(),
+                      "capability has its expected effect when events resolve");
+                check(simulation.undoDepth() == depth + 1 && simulation.undo(report) &&
+                      fingerprint(simulation.world()) == before, "successful capability remains undoable");
+            } else {
+                check(report.str().find(repair ? "has no repair capability" : "has no healing capability")
+                      != std::string::npos && report.str().find("Entity #1") != std::string::npos,
+                      "failed cast identifies actor and missing capability");
+                check(fingerprint(simulation.world()) == before && simulation.undoDepth() == depth,
+                      "failed cast preserves resources, history, events and undo depth");
+                check(simulation.createDefault(EntityKind::Engineer, report),
+                      "application continues after unsupported capability");
+            }
+        }
+    }
+
+    // Drive the real menu: two failed casts, then two accepted requests,
+    // followed by event inspection and an ordinary polymorphic turn.
+    std::istringstream input(
+        "2\n1\nInjured engineer\n100\n40\n1\n100\n100\n5\n10\n"
+        "1\n2\n"
+        "2\n3\nDamaged bot\n100\n40\n1\n100\n100\n5\n10\n"
+        "8\n2\n3\n9\n1\n1\n8\n1\n3\n9\n2\n1\n11\n12\n0\n");
+    std::ostringstream output;
+    ConsoleUI ui(input, output);
+    ui.run();
+    const auto text = output.str();
+    for (const char* expected : {"has no repair capability", "has no healing capability",
+                                 "queued repair for #3", "queued treatment for #1",
+                                 "source #1", "source #2", "End of turn 1"})
+        check(text.find(expected) != std::string::npos, "menu continues after failed capability casts");
+}
+
 void consoleInput() {
     std::istringstream input("oops\n999999999999999999999999999999999\n1junk\n-5\n16\n1\n7\n1\n4\n999\n14\n14\n0\n");
     std::ostringstream output;
@@ -537,6 +597,7 @@ int main() {
         capabilitiesAndEvents(); std::cout << "PASS capabilities, polymorphism and FIFO events\n";
         boundariesAndOutcomes(); std::cout << "PASS bounds, outcomes and ownership stress\n";
         turnSimulation(); std::cout << "PASS consecutive turns, recovery, inactivity and deletion\n";
+        optionalCapabilities(); std::cout << "PASS optional capability cast matrix and menu recovery\n";
         consoleInput(); std::cout << "PASS console validation and EOF\n";
         std::cout << "All regression groups passed.\n";
     } catch (const std::exception& error) {

@@ -92,7 +92,11 @@ bool Simulation::repair(int actorId, int targetId, std::ostream& out) {
         // F5: this is capability discovery across two independent branches.
         // Ordinary turns do not cast or inspect a concrete entity type.
         auto* capability = dynamic_cast<RepairCapability*>(actor);
-        if (!capability) { report << "Selected entity has no repair capability.\n"; return false; }
+        if (!capability) {
+            report << "Entity #" << actorId << " (" << actor->kindName()
+                   << ") has no repair capability. Choose an Engineer or MaintenanceBot.\n";
+            return false;
+        }
         return capability->requestRepair(world, targetId, report);
     }, out);
 }
@@ -105,8 +109,13 @@ bool Simulation::heal(int actorId, int targetId, std::ostream& out) {
         }
         Entity* actor = world.find(actorId);
         if (!actor) { report << "Unknown actor ID.\n"; return false; }
+        // Cross-cast only for this optional user-requested capability.
         auto* capability = dynamic_cast<HealingCapability*>(actor);
-        if (!capability) { report << "Selected entity has no healing capability.\n"; return false; }
+        if (!capability) {
+            report << "Entity #" << actorId << " (" << actor->kindName()
+                   << ") has no healing capability. Choose a Medic or MedicalDrone.\n";
+            return false;
+        }
         return capability->requestHealing(world, targetId, report);
     }, out);
 }
