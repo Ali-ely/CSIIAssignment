@@ -11,6 +11,7 @@ class ConsoleUI {
     Simulation simulation_;
     std::istream& in_;
     std::ostream& out_;
+    bool readLine(const std::string& prompt, std::string& result);
     bool readInt(const std::string& prompt, int minimum, int maximum, int& result);
     bool readName(std::string& result);
     bool readSettings(EntitySettings& settings);

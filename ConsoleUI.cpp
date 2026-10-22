@@ -4,11 +4,24 @@
 #include <limits>
 #include <sstream>
 
+bool ConsoleUI::readLine(const std::string& prompt, std::string& result) {
+    out_ << prompt << std::flush;
+    if (!std::getline(in_, result)) {
+        // EOF or an unusable stream aborts an unfinished command without
+        // committing it. Retrying a failed stream would loop forever.
+        out_ << (in_.eof() ? "\nInput ended. " : "\nInput could not be read. ")
+             << "Colony session ended.\n";
+        return false;
+    }
+    // Accept redirected Windows input when the executable runs under Linux.
+    if (!result.empty() && result.back() == '\r') result.pop_back();
+    return true;
+}
+
 bool ConsoleUI::readInt(const std::string& prompt, int minimum, int maximum, int& result) {
     std::string line;
     while (true) {
-        out_ << prompt;
-        if (!std::getline(in_, line)) return false;
+        if (!readLine(prompt, line)) return false;
         std::istringstream parser(line);
         long long value = 0;
         if (parser >> value) {
@@ -28,8 +41,7 @@ bool ConsoleUI::readId(const std::string& prompt, int& result) {
 
 bool ConsoleUI::readName(std::string& result) {
     while (true) {
-        out_ << "Name (1-60 characters): ";
-        if (!std::getline(in_, result)) return false;
+        if (!readLine("Name (1-60 characters): ", result)) return false;
         EntitySettings check;
         check.name = result;
         try { check.validate(); return true; }
@@ -40,7 +52,8 @@ bool ConsoleUI::readName(std::string& result) {
 bool ConsoleUI::readSettings(EntitySettings& settings) {
     if (!readName(settings.name)) return false;
     if (!readInt("Maximum health/integrity (1-1000): ", 1, 1000, settings.maxHealth)) return false;
-    if (!readInt("Current health/integrity: ", 0, settings.maxHealth, settings.health)) return false;
+    if (!readInt("Current health/integrity (0-" + std::to_string(settings.maxHealth) + "): ",
+                 0, settings.maxHealth, settings.health)) return false;
     if (settings.health == 0) {
         settings.active = false;
         out_ << "Zero health makes this entity inactive.\n";
@@ -50,7 +63,8 @@ bool ConsoleUI::readSettings(EntitySettings& settings) {
         settings.active = active != 0;
     }
     if (!readInt("Maximum stamina/battery (1-1000): ", 1, 1000, settings.maxEnergy)) return false;
-    if (!readInt("Current stamina/battery: ", 0, settings.maxEnergy, settings.energy)) return false;
+    if (!readInt("Current stamina/battery (0-" + std::to_string(settings.maxEnergy) + "): ",
+                 0, settings.maxEnergy, settings.energy)) return false;
     if (!readInt("Role skill/efficiency (1-10): ", 1, 10, settings.skill)) return false;
     return readInt("Role supplies (parts, medical supplies, or doses; 0-10000): ",
                    0, 10000, settings.supplies);
@@ -75,7 +89,8 @@ void ConsoleUI::run() {
     while (true) {
         menu();
         int choice = 0;
-        if (!readInt("Choice: ", 0, 15, choice) || choice == 0) break;
+        if (!readInt("Choice: ", 0, 15, choice)) return;
+        if (choice == 0) break;
         int id = 0;
         int target = 0;
         int kind = 0;

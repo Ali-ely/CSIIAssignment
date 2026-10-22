@@ -763,6 +763,64 @@ void snapshotUndoLifecycle() {
           "empty stack pop leaves destination unchanged");
 }
 
+void menuInputBoundaries() {
+    const auto run = [](const std::string& commands) {
+        std::istringstream input(commands);
+        std::ostringstream output;
+        ConsoleUI ui(input, output);
+        ui.run();
+        return output.str();
+    };
+    const auto recovered = run(
+        "\nhello\n1.5\n1junk\n99999999999999999999999999\n-1\n16\n"
+        "2\n0\n5\nx\n1\n"
+        "\n   \nBad\tName\n" + std::string(61, 'a') + "\nValid colonist\n"
+        "0\n1001\n100\n-1\n101\n40\n2\n-1\n1\n"
+        "0\n1001\n100\n-1\n101\n80\n0\n11\n5\n-1\n10001\n10\n"
+        "4\nabc\n0\n-1\n9999999999999999999999999\n1\n"
+        "13\n-2\n0\n1001\nno\n1\n0\n");
+    for (const char* expected : {"Enter a whole number", "Name must contain",
+                                 "Created Engineer #1", "Valid colonist [Engineer]",
+                                 "40/100", "End of turn 1", "Colony session ended."})
+        check(recovered.find(expected) != std::string::npos, "every custom field and numeric input recovers");
+
+    const auto missing = run("4\n99\n5\n99\n6\n99\n7\n99\n"
+                             "8\n99\n1\n9\n99\n1\n10\n9\n1\n99\n-1\n0\n1001\n5\n3\n0\n");
+    check(missing.find("Unknown entity ID") != std::string::npos &&
+          missing.find("Unknown actor ID") != std::string::npos &&
+          missing.find("Unknown target ID") != std::string::npos &&
+          missing.find("The colony has no entities") != std::string::npos,
+          "all missing-ID operations return to usable menu");
+
+    // EOF at every boundary of an unfinished custom form must terminate,
+    // without creating or modifying an entity using partial attributes.
+    const std::vector<std::string> fields = {"2", "1", "EOF candidate", "100", "50", "1", "100", "80", "5", "10"};
+    std::string prefix;
+    for (const auto& field : fields) {
+        const auto text = run(prefix);
+        check(text.find("Created") == std::string::npos && text.find("Input ended") != std::string::npos,
+              "EOF safely aborts every creation prompt");
+        prefix += field + '\n';
+    }
+    const auto complete = run(prefix);
+    check(complete.find("Created Engineer #1") != std::string::npos, "completed form commits before EOF");
+    for (const std::string command : {"4\n", "5\n1\nPartial edit\n", "6\n", "7\n", "8\n", "8\n1\n",
+                                      "9\n1\n", "10\n", "10\n1\n", "10\n1\n1\n", "13\n"}) {
+        const auto text = run("1\n1\n" + command);
+        check(text.find("Input ended") != std::string::npos && text.find("Updated #") == std::string::npos &&
+              text.find("Duplicated #") == std::string::npos && text.find("Deleted #") == std::string::npos,
+              "EOF aborts unfinished menu actions");
+    }
+    check(run("2\r\n1\r\nCRLF name\r\n100\r\n0\r\n100\r\n0\r\n1\r\n0\r\n4\r\n1\r\n0\r\n")
+          .find("CRLF name [Engineer]") != std::string::npos, "CRLF redirected input and zero health form");
+    std::istringstream broken;
+    broken.setstate(std::ios::badbit);
+    std::ostringstream output;
+    ConsoleUI ui(broken, output);
+    ui.run();
+    check(output.str().find("Input could not be read") != std::string::npos, "bad input stream exits instead of looping");
+}
+
 void consoleInput() {
     std::istringstream input("oops\n999999999999999999999999999999999\n1junk\n-5\n16\n1\n7\n1\n4\n999\n14\n14\n0\n");
     std::ostringstream output;
@@ -799,6 +857,7 @@ int main() {
         optionalCapabilities(); std::cout << "PASS optional capability cast matrix and menu recovery\n";
         fifoEventLifecycle(); std::cout << "PASS mixed FIFO events, inspection and queue lifetime\n";
         snapshotUndoLifecycle(); std::cout << "PASS exact snapshot undo and stack ownership\n";
+        menuInputBoundaries(); std::cout << "PASS menu input boundaries and interrupted forms\n";
         consoleInput(); std::cout << "PASS console validation and EOF\n";
         std::cout << "All regression groups passed.\n";
     } catch (const std::exception& error) {
